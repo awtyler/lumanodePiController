@@ -52,6 +52,17 @@ if [ -z "$CHROMIUM_PATH" ]; then
     exit 1
 fi
 
+# Setup logging directory
+LUMANODE_LOG_DIR="/var/log/lumanode"
+if [ ! -d "$LUMANODE_LOG_DIR" ]; then
+    echo "Creating log directory: $LUMANODE_LOG_DIR"
+    sudo mkdir -p "$LUMANODE_LOG_DIR"
+    sudo chown $(whoami):$(whoami) "$LUMANODE_LOG_DIR" 2>/dev/null || sudo chmod 777 "$LUMANODE_LOG_DIR"
+    echo "✓ Log directory created"
+else
+    echo "✓ Log directory already exists"
+fi
+
 echo
 echo "Step 3: Create kiosk configuration files"
 
@@ -158,7 +169,9 @@ exec $CHROMIUM_PATH \
     --disable-popup-blocking \
     --disable-session-crashed-bubble \
     --disable-infobars \
-    "\$KIOSK_URL"
+    --enable-logging \
+    --v=1 \
+    "\$KIOSK_URL" 2>&1 | tee /var/log/lumanode/chromium.log
 XEOF
         chmod +x "$XINITRC_FILE"
         echo "✓ .xinitrc configured"
@@ -190,7 +203,9 @@ exec $CHROMIUM_PATH \
     --disable-popup-blocking \
     --disable-session-crashed-bubble \
     --disable-infobars \
-    "\$KIOSK_URL"
+    --enable-logging \
+    --v=1 \
+    "\$KIOSK_URL" 2>&1 | tee /var/log/lumanode/chromium.log
 XEOF
     chmod +x "$XINITRC_FILE"
     echo "✓ .xinitrc created"
@@ -292,7 +307,7 @@ EOF
             cp "$BASH_PROFILE_FILE" "${BASH_PROFILE_FILE}.kiosk.bak"
         fi
         
-        # Create .bash_profile with X11 auto-start
+        # Create .bash_profile with X11 auto-start and Docker startup
         cat > "$BASH_PROFILE_FILE" <<'PROFILEEOF'
 # .bash_profile - runs on login shells
 
@@ -303,6 +318,27 @@ fi
 
 # Auto-start X11 on login (for kiosk mode)
 if [ -z "$DISPLAY" ] && [ "$XDG_VTNR" = "1" ]; then
+    # Ensure Docker container is running
+    LUMANODE_DIR="$(cd ~ && pwd)/lumanodePiController"
+    if [ -d "$LUMANODE_DIR" ]; then
+        if ! docker ps 2>/dev/null | grep -q lumanode; then
+            echo "Starting Lumanode service..."
+            cd "$LUMANODE_DIR"
+            docker-compose up -d 2>/dev/null
+            
+            # Wait for the service to be ready (max 30 seconds)
+            echo "Waiting for Lumanode service to start..."
+            for i in {1..30}; do
+                if curl -s http://localhost:5000/api/health > /dev/null 2>&1; then
+                    echo "✓ Service ready"
+                    break
+                fi
+                sleep 1
+            done
+        fi
+    fi
+    
+    export DISPLAY=:0
     exec startx
 fi
 PROFILEEOF

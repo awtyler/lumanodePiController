@@ -10,6 +10,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
+      - ./app:/app
       - ./visualizations:/sketches/visualizations
       - ./data:/app/data
       - /dev/ttyACM0:/dev/ttyACM0
