@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  lumanode:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: lumanode-controller
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./visualizations:/sketches/visualizations
+      - ./data:/app/data
+      - /dev/ttyACM0:/dev/ttyACM0
+    environment:
+      - SKETCHES_DIR=/sketches/visualizations
+      - BUILD_DIR=/tmp/arduino_build
+      - ARDUINO_BOARD=arduino:renesas_uno:uno_r4_wifi
+      - SERIAL_PORT=/dev/ttyACM0
+      - SERIAL_SPEED=115200
+      - FLASK_ENV=production
+    devices:
+      - /dev/ttyACM0:/dev/ttyACM0
+    privileged: true
+    networks:
+      - lumanode-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+networks:
+  lumanode-net:
+    driver: bridge

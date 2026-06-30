@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Lumanode Pi Controller</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Lumanode</h1>
+            <div class="status-bar">
+                <div id="status" class="status idle">Ready</div>
+                <div id="status-message" class="status-message"></div>
+            </div>
+        </header>
+
+        <main>
+            <section class="sketches-section">
+                <h2>Visualizations</h2>
+                <div id="sketches-container" class="sketches-grid">
+                    <div class="loading">Loading sketches...</div>
+                </div>
+            </section>
+
+            <section class="status-section">
+                <div class="current-sketch">
+                    <label>Active Sketch:</label>
+                    <div id="active-sketch" class="sketch-name">None</div>
+                </div>
+                
+                <div class="action-buttons">
+                    <button id="refresh-btn" class="btn btn-secondary">Refresh</button>
+                    <button id="history-btn" class="btn btn-secondary">History</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- History Modal -->
+    <div id="history-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Flash History</h3>
+                <button class="close-btn">&times;</button>
+            </div>
+            <div id="history-list" class="history-list">
+                <p>No history yet</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Modal -->
+    <div id="status-modal" class="modal hidden">
+        <div class="modal-content compact">
+            <div class="modal-body">
+                <div class="spinner"></div>
+                <p id="modal-message">Processing...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

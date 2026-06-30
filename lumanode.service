@@ -1,0 +1,21 @@
+[Unit]
+Description=Lumanode Pi Controller
+Documentation=https://github.com/awtyler/lumanodePiController
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%u
+WorkingDirectory=%h/lumanodePiController
+ExecStart=/usr/bin/docker-compose up --no-recreate
+ExecStop=/usr/bin/docker-compose down
+Restart=unless-stopped
+RestartSec=10
+
+# Resource limits
+MemoryLimit=1G
+CPUQuota=80%
+
+[Install]
+WantedBy=multi-user.target
