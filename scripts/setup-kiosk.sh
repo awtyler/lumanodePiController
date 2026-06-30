@@ -34,7 +34,26 @@ else
 fi
 
 echo
-echo "Step 2: Create kiosk configuration files"
+echo "Step 2: Find Chromium browser installation"
+
+# Search for chromium in common locations
+CHROMIUM_PATH=""
+for browser in chromium chromium-browser google-chrome google-chrome-stable; do
+    if which $browser &>/dev/null; then
+        CHROMIUM_PATH=$(which $browser)
+        echo "✓ Found Chromium at: $CHROMIUM_PATH"
+        break
+    fi
+done
+
+if [ -z "$CHROMIUM_PATH" ]; then
+    echo "✗ Chromium not found!"
+    echo "  Please install: sudo apt-get install -y chromium"
+    exit 1
+fi
+
+echo
+echo "Step 3: Create kiosk configuration files"
 
 # Create config directories if needed
 mkdir -p ~/.config/lxsession/LXDE-pi
@@ -114,7 +133,7 @@ if [ -f "$XINITRC_FILE" ]; then
         echo "  Backing up to .xinitrc.bak and creating new config"
         cp "$XINITRC_FILE" "${XINITRC_FILE}.bak"
         
-        cat > "$XINITRC_FILE" <<'XEOF'
+        cat > "$XINITRC_FILE" <<XEOF
 #!/bin/bash
 # Disable screensaver and DPMS
 xset s off
@@ -125,11 +144,11 @@ xset s noblank
 unclutter -idle 1 -root &
 
 # Get local IP
-HOSTNAME=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
-KIOSK_URL="http://$HOSTNAME:5000"
+HOSTNAME=\$(hostname -I 2>/dev/null | awk '{print \$1}' || echo "localhost")
+KIOSK_URL="http://\$HOSTNAME:5000"
 
 # Start Chromium in kiosk mode
-exec /usr/bin/chromium-browser \
+exec $CHROMIUM_PATH \
     --kiosk \
     --no-first-run \
     --no-default-browser-check \
@@ -139,14 +158,14 @@ exec /usr/bin/chromium-browser \
     --disable-popup-blocking \
     --disable-session-crashed-bubble \
     --disable-infobars \
-    "$KIOSK_URL"
+    "\$KIOSK_URL"
 XEOF
         chmod +x "$XINITRC_FILE"
         echo "✓ .xinitrc configured"
     fi
 else
     echo "Creating .xinitrc..."
-    cat > "$XINITRC_FILE" <<'XEOF'
+    cat > "$XINITRC_FILE" <<XEOF
 #!/bin/bash
 # Disable screensaver and DPMS
 xset s off
@@ -157,11 +176,11 @@ xset s noblank
 unclutter -idle 1 -root &
 
 # Get local IP
-HOSTNAME=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
-KIOSK_URL="http://$HOSTNAME:5000"
+HOSTNAME=\$(hostname -I 2>/dev/null | awk '{print \$1}' || echo "localhost")
+KIOSK_URL="http://\$HOSTNAME:5000"
 
 # Start Chromium in kiosk mode
-exec /usr/bin/chromium-browser \
+exec $CHROMIUM_PATH \
     --kiosk \
     --no-first-run \
     --no-default-browser-check \
@@ -171,38 +190,20 @@ exec /usr/bin/chromium-browser \
     --disable-popup-blocking \
     --disable-session-crashed-bubble \
     --disable-infobars \
-    "$KIOSK_URL"
+    "\$KIOSK_URL"
 XEOF
     chmod +x "$XINITRC_FILE"
     echo "✓ .xinitrc created"
 fi
 
 echo
-echo "Step 5: Remove LXDE desktop (not needed for kiosk mode)"
-
-# Check if LXDE is installed
-if dpkg -l | grep -q "^ii  lxsession"; then
-    echo "Removing LXDE and related packages..."
-    sudo apt-get remove -y lxsession lxde-common openbox 2>&1 | grep -v "^Reading\|^Building\|^Selecting" || true
-    
-    # Also try to remove the metapackage if it exists
-    sudo apt-get remove -y lxde 2>/dev/null || true
-    
-    echo "✓ LXDE removed"
-else
-    echo "✓ LXDE not installed"
-fi
-
-# Backup and disable autostart file as fallback
-LXDE_AUTOSTART="$HOME/.config/lxsession/LXDE-pi/autostart"
-if [ -f "$LXDE_AUTOSTART" ] && [ ! -f "${LXDE_AUTOSTART}.disabled" ]; then
-    mv "$LXDE_AUTOSTART" "${LXDE_AUTOSTART}.disabled" 2>/dev/null || true
-fi
+echo "Step 5: Check for automatic kiosk mode preference"
 
 echo
 echo "=========================================="
 echo "Would you like to enable automatic kiosk mode?"
 echo "This will:"
+echo "  - Remove LXDE desktop (not needed for kiosk)"
 echo "  - Auto-login to console on boot"
 echo "  - Auto-start X11 and Chromium"
 echo "  - Display Lumanode immediately (no manual input needed)"
@@ -223,7 +224,23 @@ fi
 
 echo
 if [ "$ENABLE_AUTOKIOSK" = true ]; then
-    echo "Step 6: Setup auto-login to console"
+    echo "Step 6: Remove LXDE desktop (not needed for kiosk mode)"
+
+    # Check if LXDE is installed
+    if dpkg -l | grep -q "^ii  lxsession"; then
+        echo "Removing LXDE and related packages..."
+        sudo apt-get remove -y lxsession lxde-common openbox 2>&1 | grep -v "^Reading\|^Building\|^Selecting" || true
+        
+        # Also try to remove the metapackage if it exists
+        sudo apt-get remove -y lxde 2>/dev/null || true
+        
+        echo "✓ LXDE removed"
+    else
+        echo "✓ LXDE not installed"
+    fi
+
+    echo
+    echo "Step 7: Setup auto-login to console"
 
     # Create systemd getty override directory
     GETTY_OVERRIDE_DIR="/etc/systemd/system/getty@tty1.service.d"
@@ -258,43 +275,50 @@ EOF
     fi
 
     echo
-    echo "Step 7: Setup X11 auto-start in bash profile"
+    echo "Step 8: Setup X11 auto-start in bash profile"
 
-    # Check if X11 auto-start is already in .bashrc
+    # Use .bash_profile for login shells (TTY1)
+    BASH_PROFILE_FILE="$HOME/.bash_profile"
     BASHRC_FILE="$HOME/.bashrc"
     X11_STARTUP_MARKER="# Auto-start X11 on login (for kiosk mode)"
 
-    if grep -q "$X11_STARTUP_MARKER" "$BASHRC_FILE"; then
-        echo "✓ X11 auto-start already in .bashrc"
+    if [ -f "$BASH_PROFILE_FILE" ] && grep -q "$X11_STARTUP_MARKER" "$BASH_PROFILE_FILE"; then
+        echo "✓ X11 auto-start already in .bash_profile"
     else
-        echo "Adding X11 auto-start to .bashrc..."
+        echo "Setting up .bash_profile for X11 auto-start..."
         
-        # Create backup
-        cp "$BASHRC_FILE" "${BASHRC_FILE}.kiosk.bak"
+        # Backup existing .bash_profile if it exists
+        if [ -f "$BASH_PROFILE_FILE" ]; then
+            cp "$BASH_PROFILE_FILE" "${BASH_PROFILE_FILE}.kiosk.bak"
+        fi
         
-        # Add X11 auto-start code
-        cat >> "$BASHRC_FILE" <<'BASHEOF'
+        # Create .bash_profile with X11 auto-start
+        cat > "$BASH_PROFILE_FILE" <<'PROFILEEOF'
+# .bash_profile - runs on login shells
+
+# Source .bashrc if it exists (to get shell configuration)
+if [ -f ~/.bashrc ]; then
+    source ~/.bashrc
+fi
 
 # Auto-start X11 on login (for kiosk mode)
-if [ -z "$DISPLAY" ] && [ -n "$XDG_VTNR" ] && [ "$XDG_VTNR" = "1" ]; then
-    startx
+if [ -z "$DISPLAY" ] && [ "$XDG_VTNR" = "1" ]; then
+    exec startx
 fi
-BASHEOF
+PROFILEEOF
         
-        echo "✓ X11 auto-start added to .bashrc"
+        echo "✓ X11 auto-start configured in .bash_profile"
     fi
 
     echo
-    echo "Step 8: Reload systemd daemon"
+    echo "Step 9: Reload systemd daemon"
 
     sudo systemctl daemon-reload
     echo "✓ Systemd daemon reloaded"
 else
-    echo "Step 6-8: Skipped (automatic kiosk mode disabled)"
+    echo "Step 6-9: Skipped (automatic kiosk mode disabled)"
 fi
 
-echo
-echo "=== Kiosk Setup Complete ==="
 echo
 echo "=== Kiosk Setup Complete ==="
 echo
@@ -304,8 +328,12 @@ echo "  Browser: Chromium in fullscreen kiosk mode"
 echo "  URL: $KIOSK_URL"
 echo "  Cursor: Hidden after 1 second of inactivity"
 echo "  Screensaver: Disabled"
-echo "  LXDE Desktop: Removed (clean kiosk-only system)"
-echo
+
+if [ "$ENABLE_AUTOKIOSK" = true ]; then
+    echo "  LXDE Desktop: Removed (clean kiosk-only system)"
+else
+    echo "  LXDE Desktop: Still installed (use 'startx' for manual kiosk mode)"
+fi
 
 if [ "$ENABLE_AUTOKIOSK" = true ]; then
     echo "Auto-start enabled:"
@@ -352,8 +380,8 @@ if [ "$ENABLE_AUTOKIOSK" = true ]; then
     if [ -f "${GETTY_OVERRIDE_FILE}.bak" ]; then
         echo "  - ${GETTY_OVERRIDE_FILE}.bak"
     fi
-    if [ -f "${BASHRC_FILE}.kiosk.bak" ]; then
-        echo "  - ${BASHRC_FILE}.kiosk.bak"
+    if [ -f "$HOME/.bash_profile.kiosk.bak" ]; then
+        echo "  - $HOME/.bash_profile.kiosk.bak"
     fi
 fi
 echo
